@@ -3,6 +3,7 @@
 ### AI Integration component for Final Project - CS 8395: Special Topics - AI-Assisted Design (for Cyber Physical Systems)
 
 By: Vivian Ma and Franklin Hu 
+
 Due: 12/5/2025
 
 A LangGraph-based agent for exploring CPS (Cyber-Physical Systems) design spaces. This agent generates, evaluates, and refines component candidates for our glucose monitor.
