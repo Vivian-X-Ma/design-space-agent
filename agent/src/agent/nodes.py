@@ -28,34 +28,98 @@ def seed_generator_node(state: dict) -> dict:
     if not requirements or not constraints:
         raise ValueError("Missing requirements or constraints in state")
     
-    # Format alert thresholds
-    alert_thresholds = requirements.get("alert_thresholds", {})
+    # Extract fields
+    sampling_interval = requirements.get("sampling_interval")
+    alert_thresholds = requirements.get("alert_thresholds")
+    battery_life = requirements.get("battery_life")
+    adc_bits = constraints.get("adc_bits")
+    ble_range = constraints.get("ble_range")
+
+    # Format alert threshold string
     if isinstance(alert_thresholds, dict):
         alert_str = f"<{alert_thresholds['low']} / >{alert_thresholds['high']} mg/dL"
     else:
         alert_str = str(alert_thresholds)
-    
-    prompt = f"""You are a CPS design assistant. Generate 5 candidate component sets for a glucose monitoring system.
 
-Requirements:
-- Sampling interval: {requirements.get('sampling_interval')}
-- Alert thresholds: {alert_str}
-- Battery life: {requirements.get('battery_life')}
+    # Unified upgraded prompt
+    prompt = f"""
+    You are a CPS design assistant performing Design Space Exploration (DSE)
+    for a continuous glucose monitoring (CGM) system. Generate 5 complete
+    candidate hardware configurations that respect ALL objectives and constraints.
 
-Constraints:
-- ADC_bits ∈ {constraints.get('adc_bits')}
-- BLE range {constraints.get('ble_range')}
+    ===========================
+            SYSTEM OBJECTIVES
+    ===========================
+    1. Minimize alert latency (must detect & alert <10s)
+    2. Minimize power consumption (≥ 24h battery life)
+    3. Optimize measurement accuracy (MARD ≤ 10%)
+    4. Maximize BLE reliability (≥99% successful transmissions)
 
-Return your response as a JSON array with exactly 5 candidates. Each candidate must have:
-- id (1-5)
-- microcontroller
-- sensor_type
-- adc_bits (integer)
-- ble_module
-- battery
-- rationale
+    ===========================
+              CONSTRAINTS
+    ===========================
+    - Sampling interval: {sampling_interval}
+    - Alert thresholds: {alert_str}
+    - Battery life: {battery_life}
+    - ADC bits ∈ {adc_bits}
+    - BLE range: {ble_range}
+    - Sampling stability: ±0.2 min max drift
+    - AFE ↔ sensor compatibility required
+    - MCU ADC must match AFE output range
+    - BLE module must match MCU interface (UART/SPI/I2C)
+    - Must fit into wearable patch form factor
 
-Return ONLY valid JSON, no markdown or explanation."""
+    ===========================
+        DESIGN SPACE PARAMETERS
+    ===========================
+    1. Sensor & AFE:
+       - sensor type, bias voltage, response time τ
+       - AFE gain, filtering, ADC resolution
+
+    2. MCU:
+       - family (Cortex-M0/M4, Nordic, TI MSP…)
+       - clock modes, ADC sampling, duty cycle
+
+    3. BLE Subsystem:
+       - tx power, advertising interval, payload size,
+       - retry/ACK configuration
+
+    4. Battery & Power:
+       - capacity, chemistry, regulator efficiency
+       - power gating strategy
+
+    5. System Timing:
+       - sampling interval & filtering window
+       - BLE message bundling strategy
+
+    ===========================
+           REQUIRED OUTPUT
+    ===========================
+    Return your response as a JSON array with exactly 5 candidates.
+
+    Each candidate must contain:
+      - id (1–5)
+      - microcontroller
+      - sensor_type
+      - sensor_bias_voltage
+      - sensor_tau
+      - afe_gain_filter
+      - adc_bits
+      - ble_module_tx_interval
+      - battery
+      - power_gating
+      - sampling_interval
+      - ble_bundling
+      - rationale
+
+    Rationale must link design choices to:
+      - latency
+      - power
+      - accuracy
+      - BLE reliability
+
+    Return ONLY valid JSON. NO markdown, NO explanations outside JSON.
+    """
 
     llm = get_llm()
     response = llm.invoke([
@@ -68,7 +132,6 @@ Return ONLY valid JSON, no markdown or explanation."""
         if isinstance(candidates, dict) and "candidates" in candidates:
             candidates = candidates["candidates"]
     except json.JSONDecodeError:
-        # Try to extract JSON from response
         import re
         json_match = re.search(r'\[[\s\S]*\]', response.content)
         if json_match:
@@ -82,16 +145,15 @@ Return ONLY valid JSON, no markdown or explanation."""
     print("=" * 80)
     for c in candidates:
         print(f"\n  #{c.get('id')}: {c.get('microcontroller')}")
-        print(f"      Sensor: {c.get('sensor_type')} | ADC: {c.get('adc_bits')}-bit | BLE: {c.get('ble_module')}")
+        print(f"      Sensor: {c.get('sensor_type')} | ADC: {c.get('adc_bits')}-bit | BLE: {c.get('ble_module_tx_interval')}")
         print(f"      Battery: {c.get('battery')}")
     print("\n" + "-" * 80)
     
     return {
         "candidates": candidates,
-        "initial_candidates": candidates,  # Store initial candidates for later display
+        "initial_candidates": candidates,
         "messages": [HumanMessage(content=f"Generated {len(candidates)} initial candidates")]
     }
-
 
 def evaluator_node(state: dict) -> dict:
     """Evaluate each candidate design and assign scores."""

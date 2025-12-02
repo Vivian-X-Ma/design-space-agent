@@ -20,87 +20,125 @@ def seed_generator_node(state: MessagesState):
         raise ValueError("Missing 'requirements' in state")
     if not constraints:
         raise ValueError("Missing 'constraints' in state")
-    
+
+    # =========================
+    # Pull Requirements
+    # =========================
     sampling_interval = requirements.get("sampling_interval")
     alert_thresholds = requirements.get("alert_thresholds")
     battery_life = requirements.get("battery_life")
-    
+    alert_latency = requirements.get("alert_latency", "<10s")
+    mard_target = requirements.get("mard_target", "<=10%")
+    ble_reliability = requirements.get("ble_reliability", ">=99%")
+
+    # =========================
+    # Pull Constraints
+    # =========================
     adc_bits = constraints.get("adc_bits")
-    ble_range = constraints.get("ble_range")
-    
-    # Validate required fields
-    if not all([sampling_interval, alert_thresholds, battery_life, adc_bits, ble_range]):
-        missing = []
-        if not sampling_interval: missing.append("sampling_interval")
-        if not alert_thresholds: missing.append("alert_thresholds")
-        if not battery_life: missing.append("battery_life")
-        if not adc_bits: missing.append("adc_bits")
-        if not ble_range: missing.append("ble_range")
+    afe_compat = constraints.get("afe_sensor_compat", "AFE bias must match sensor output")
+    sampling_stability = constraints.get("sampling_stability", "±0.2 min max drift")
+    mcu_ble_interface = constraints.get("mcu_ble_interface", "{UART, SPI, I2C}")
+    battery_form_factor = constraints.get("battery_form_factor", "Wearable patch form factor")
+    ble_range = constraints.get("ble_range", "≤5m")
+
+    # Validate required minimal fields
+    missing = []
+    if not sampling_interval: missing.append("sampling_interval")
+    if not alert_thresholds: missing.append("alert_thresholds")
+    if not battery_life: missing.append("battery_life")
+    if not adc_bits: missing.append("adc_bits")
+    if missing:
         raise ValueError(f"Missing required fields: {', '.join(missing)}")
-    
+
     # Format alert thresholds
     if isinstance(alert_thresholds, dict):
         alert_str = f"<{alert_thresholds['low']} / >{alert_thresholds['high']} mg/dL"
     else:
         alert_str = str(alert_thresholds)
-    
+
+    # =========================
+    # Build the Prompt
+    # =========================
     prompt = f"""
-You are a CPS design assistant.
-Select candidate components for a glucose monitoring system.
+    You are a CPS design assistant performing Design Space Exploration (DSE)
+    for a continuous glucose monitoring (CGM) system. Generate 5 complete
+    candidate hardware configurations that respect ALL objectives and constraints.
 
-Requirements:
-- Sampling interval: {sampling_interval}
-- Alert thresholds: {alert_str}
-- Battery: {battery_life}
+    ===========================
+            SYSTEM OBJECTIVES
+    ===========================
+    1. Alert latency requirement: {alert_latency}
+    2. Battery life requirement: {battery_life}
+    3. Measurement accuracy target (MARD): {mard_target}
+    4. BLE link reliability target: {ble_reliability}
 
-Constraints:
-- ADC_bits ∈ {adc_bits}
-- BLE range {ble_range}
+    ===========================
+            HARD CONSTRAINTS
+    ===========================
+    - Sampling interval: {sampling_interval}
+    - Sampling stability: {sampling_stability}
+    - Alert thresholds: {alert_str}
+    - ADC bits must be one of: {adc_bits}
+    - Sensor ↔ AFE compatibility: {afe_compat}
+    - MCU ↔ BLE interface allowed: {mcu_ble_interface}
+    - BLE range constraint: {ble_range}
+    - Physical constraint: {battery_form_factor}
 
-Generate 5 candidate sets. Format your response nicely for terminal display using this structure:
+    ===========================
+            DESIGN PARAMETERS
+    ===========================
+    1. Sensor & AFE:
+       - Sensor type, bias voltage, response time (τ)
+       - AFE gain, filtering, ADC resolution, noise floor
 
-================================================================================
-                    GLUCOSE MONITORING SYSTEM CANDIDATES
-================================================================================
+    2. Microcontroller:
+       - MCU family (Cortex-M0/M4, Nordic NRF52, TI MSP430, etc.)
+       - ADC sampling, clock modes, duty cycling
 
-For each candidate, use:
+    3. BLE Subsystem:
+       - BLE module, TX power, connection interval, packet bundling
+       - Retry/ACK strategy
 
-────────────────────────────────────────────────────────────────────────────────
-CANDIDATE SET #[number]
-────────────────────────────────────────────────────────────────────────────────
+    4. Battery & Power:
+       - Capacity, chemistry, regulator efficiency
+       - Sleep strategy, power gating
 
-  * Microcontroller: [value]
-  * Sensor Type: [value]
-  * ADC Bits: [value]
-  * BLE Module: [value]
-  * Battery: [value]
+    5. System Timing:
+       - Sampling schedule relative to filtering window
+       - BLE transmission scheduling
 
-  Rationale:
-    [explanation text with line breaks for readability]
+    ===========================
+           REQUIRED OUTPUT
+    ===========================
+    Generate *exactly 5* candidate sets using this template:
 
-After all 5 candidates, include a TOP PICK recommendation like this:
+    --------------------------------------------------------------------------------
+    CANDIDATE SET #[number]
+    --------------------------------------------------------------------------------
+    * Microcontroller:
+    * Sensor Type:
+    * Sensor Bias Voltage:
+    * Sensor τ (response time):
+    * AFE Gain / Filter Strategy:
+    * ADC Resolution (bits):
+    * BLE Module / Tx Power / Interval:
+    * Battery Capacity & Type:
+    * Power Gating Strategy:
+    * Sampling Interval:
+    * BLE Bundling Strategy:
 
-================================================================================
-                                     TOP PICK 
-================================================================================
+    Rationale:
+    - Explain how this design meets latency, power, accuracy, and reliability goals
+    - Discuss any trade-offs
+    - Must satisfy ALL constraints
+    --------------------------------------------------------------------------------
 
-  CANDIDATE SET #[number]
+    After generating all 5 candidates, select a TOP CANDIDATE and provide a
+    short justification.
 
-  * Microcontroller: [value]
-  * Sensor Type: [value]
-  * ADC Bits: [value]
-  * BLE Module: [value]
-  * Battery: [value]
-
-  Why this is the best choice:
-    [Explain why this candidate is recommended over the others, considering
-    the balance of accuracy, power efficiency, cost, and reliability]
-
-================================================================================
-
-Use clear spacing, bullets (*), and visual separators. Make it easy to scan and read.
-"""
-
+    Return ONLY the raw text of the 5 candidates + the top candidate justification.
+    """
+    
     # Create the Groq LLM instance
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",

@@ -8,24 +8,31 @@ from src.agent.graph import graph
 # Define the initial state with requirements and constraints
 initial_state = {
     "requirements": {
+        "alert_latency": "<=10s",
+        "mard_target": "<=10%",
         "sampling_interval": "5 ± 0.2 min",
         "alert_thresholds": {"low": 70, "high": 180},
-        "battery_life": ">=24h"
+        "battery_life": ">=24h",
+        "ble_reliability": ">=99%"
     },
     "constraints": {
-        "adc_bits": "{10,12,14,16}",
-        "ble_range": "≤5m"
+        "adc_bits": "{10,12,14}",
+        "afe_sensor_compat": "AFE bias voltage & gain must match sensor output",
+        "mcu_ble_interface": "{UART, SPI, I2C}",
+        "sampling_stability": "Cannot drift beyond ±0.2 min",
+        "battery_form_factor": "Wearable patch size",
     },
     "messages": [],
     "candidates": [],
     "initial_candidates": [],
     "evaluations": [],
     "iteration": 0,
-    "max_iterations": 2,  # Number of refinement cycles
+    "max_iterations": 2,
     "top_pick": None,
     "selection_reasoning": "",
     "formatted_output": ""
 }
+
 
 print("Starting Design Space Exploration Agent...")
 print("=" * 60)
